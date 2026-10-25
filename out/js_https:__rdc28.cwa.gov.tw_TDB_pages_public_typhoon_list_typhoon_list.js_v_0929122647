@@ -1,0 +1,147 @@
+/* global moment, lang, global */
+
+$(function () {
+    var this_year = moment().format('YYYY');
+
+    var year_options = '<option value="all">' + lang['option_all'] + '</option>';
+    for (var i = this_year; i >= global.min_year; i--) {
+        year_options += '<option value="' + i + '">' + i + '</option>';
+    }
+    $('#filter-year').html(year_options);
+
+    $('#max_wind_speed_definition').click(function () {
+        $('#max_wind_speed_definition_detail').toggle('slide', {direction: 'right'});
+    });
+
+    $('#filter-year').change(function () {
+        search();
+    });
+
+    search();
+
+    function search () {
+        var data = {
+            year: $('#filter-year').val()
+        };
+
+        $("#filter-year").prop("disabled", true);
+
+        $.ajax({
+            url: global.controller + '/get_typhoon',
+            type: 'POST',
+            dataType: 'json',
+            data: data,
+            success: function (rows) {
+                $("#typhoon_list_table").empty();
+
+                $("#typhoon_list_table").footable({
+                    toggleColumn: "first",
+                    empty: lang['no_results'],
+                    paging: {
+                        enabled: false
+                    },
+                    columns: [
+                        {
+                            name: "collapse_use",
+                            title: '',
+                            style: {width: "1%"}
+                        },
+                        {
+                            name: "year",
+                            breakpoints: 'xs',
+                            title: lang['year'],
+                            style: {width: "5%"},
+                            formatter: function (value, options, rowData) {
+                                return rowData.id.substr(0, 4);
+                            }
+                        },
+                        {
+                            name: "id",
+                            title: lang['id'],
+                            style: {width: "5%"},
+                            formatter: function (value, options, rowData) {
+                                var html = "<a data-ajax='false' target='_blank' href=" + global.base_url + "public/typhoon_detail?typhoon_id=" + rowData.id + ">" + rowData.id + "</a>";
+                                return html;
+                            }
+                        },
+                        {
+                            name: "cht_name",
+                            title: lang['typhoon_name'],
+                            style: {width: "10%"},
+                            formatter: function (value, options, rowData) {
+                                return global.current_lang === 'english' ? rowData.eng_name : value + '<br>(' + rowData.eng_name + ')';
+                            }
+                        },
+                        {
+                            name: "eng_name",
+                            visible: false
+                        },
+                        {
+                            name: "genesis_datetime",
+                            title: lang['typhoon_lifetime_utc'],
+                            style: {width: "12%"},
+                            formatter: function (value, options, rowData) {
+                                var genesis_datetime = (rowData.genesis_datetime && rowData.genesis_datetime !== "0000-00-00 00:00:00") ? moment(rowData.genesis_datetime).format('YYYY-MM-DD HH:mm') : "---";
+                                var dead_datetime = (rowData.dead_datetime && rowData.dead_datetime !== "0000-00-00 00:00:00") ? moment(rowData.dead_datetime).format('YYYY-MM-DD HH:mm') : "---";
+
+                                return genesis_datetime + '<br>' + dead_datetime;
+                            }
+                        },
+                        {
+                            visible: false,
+                            name: "dead_datetime"
+                        },
+                        {
+                            name: "min_pressure",
+                            title: lang['min_pressure'],
+                            style: {width: "10%"},
+                            formatter: function (value, options, rowData) {
+                                return  value === '' ? '---' : value;
+                            }
+                        },
+                        {
+                            name: "max_intensity",
+                            breakpoints: 'xs',
+                            title: lang['max_gust_speed'],
+                            style: {width: "10%"},
+                            formatter: function (value, options, rowData) {
+                                return  value === '' ? '---' : value;
+                            }
+                        },
+                        {
+                            name: "max_class7_radius",
+                            breakpoints: 'xs',
+                            title: lang['max_class7_radius'],
+                            style: {width: "10%"},
+                            formatter: function (value, options, rowData) {
+                                return  value === '' ? '---' : value;
+                            }
+                        },
+                        {
+                            name: "max_class10_radius",
+                            breakpoints: 'xs',
+                            title: lang['max_class10_radius'],
+                            style: {width: "12%"},
+                            formatter: function (value, options, rowData) {
+                                return  value === '' ? '---' : value;
+                            }
+                        },
+                        {
+                            name: "warning_count",
+                            breakpoints: 'xs',
+                            title: lang['warning_count'],
+                            style: {width: "10%"},
+                            formatter: function (value, options, rowData) {
+                                return  value === '' ? '---' : value;
+                            }
+                        }
+                    ],
+                    rows: rows
+                }, function () {
+                    $("#filter-year").prop("disabled", false);
+                });
+
+            }
+        });
+    }
+});

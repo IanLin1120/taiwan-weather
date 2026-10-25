@@ -1,0 +1,141 @@
+$(function () {
+    // 為了 jquery mobile 寫的 ，不然他跳頁會死給你看
+    $.each($(".sub_menu a"), function (key, a_dom) {
+        $(a_dom).attr("data-ajax", false);
+    });
+
+    //IE不支援flex box
+    if (document.documentMode !== undefined) {
+        $(".row").css("display", "block");
+        $("#main_content_container").css("display", "block");
+    }
+
+    var resize_timeout = null;
+    $(window).resize(function () {
+        if (resize_timeout) {
+            clearTimeout(resize_timeout);
+        }
+
+        resize_timeout = setTimeout(function () {
+            get_device_type();
+        }, 500);
+    });
+
+    function get_device_type () {
+        var width = $('body').prop('clientWidth');
+        global.device = 'desktop';
+
+        if (width < 768) {
+            global.device = 'mobile';
+        } else if (width < 992) {
+            global.device = 'tablet';
+        }
+    }
+
+    get_device_type();
+
+    $("#forecastModal, #statisticsModal").on("show.bs.modal", function (event) {
+        var clicked_btn = $(event.relatedTarget);
+        var path_list = $(event.relatedTarget).data("path");
+        var modal_header = "";
+        var forecast_html = "";
+        $(this).find(".modal-header").hide();
+
+        if ($(clicked_btn).data("version") === "new") {
+            var modal_content = $(clicked_btn).data("content");
+            modal_header = $(clicked_btn).data("header");
+            $(this).find(".modal-header").show();
+
+            if ($(clicked_btn).data("content")) {
+                forecast_html += "<p>" + $(clicked_btn).find("." + modal_content).html() + "</p>";
+            }
+
+            var info_set = path_list.split(";");
+            $.each(info_set, function (num, list) {
+                var para_set = list.split(":");
+                var body_para = para_set[0];
+
+                if (para_set.length > 1) {
+                    forecast_html += "<h6 class='forecast_title'>" + para_set[0] + "</h6>";
+                    body_para = para_set[1];
+                }
+
+                var content_set = body_para.split("+++");
+                var img_set = content_set[0];
+                if (content_set.length > 1) {
+                    forecast_html += "<p>" + $(clicked_btn).find("." + content_set[0]).html() + "</p>";
+                    img_set = content_set[1];
+                }
+
+                $.each(img_set.split(","), function (index, path) {
+                    forecast_html += "<div class='forecast_img'><img src='" + global.base_url + path + "'></div>";
+                });
+            });
+        } else {
+            $.each(path_list.split(","), function (num, path) {
+                forecast_html += "<div class='forecast_img'><img src='" + global.base_url + path + "'></div>";
+            });
+        }
+
+        $(this).find(".modal-header").text(modal_header);
+        $(this).find(".modal-body").html(document.createTextNode(forecast_html).wholeText);
+    });
+
+    $("#typhoonModal").on("show.bs.modal", function (event) {
+        var clicked_btn = $(event.relatedTarget);
+        var typhoon_id = clicked_btn.data("typhoonid");
+        var modal_info = clicked_btn.data("info").split(";");
+        var modal_html = "";
+
+        $(this).find(".modal-header>a").hide();
+        $(this).find(".modal-header h5").text(clicked_btn.data("title"));
+
+        if (typhoon_id) {
+            $(this).find(".modal-header>a").attr("href", global.base_url + "public/typhoon_detail?typhoon_id=" + typhoon_id).show();
+        }
+
+        $.each(modal_info, function (para, data) {
+            var title_content = data.split(":");
+            var img_content = title_content[0];
+            var img_note = "";
+
+            if (data.match(":") !== null) {
+                modal_html += "<h6 class='typhoon_title'>" + title_content[0] + "</h6>";
+                img_content = title_content[1];
+            }
+
+            $.each(img_content.split(","), function (num, path) {
+                if (path.match(/^(.*)\.pdf/gm) !== null) {
+                    modal_html += "<div class='pic_wrapper'><iframe src='" + global.base_url + path + "#zoom=100'></iframe></div>";
+                } else if (path.match(/^(.*)\.avi/gm) !== null) {
+                    modal_html += "<a href='" + global.base_url + path + "'><img src='" + global.base_url + "data/forecast_imgs/typhoon/mov_player.gif'></a>";
+                } else {
+                    modal_html += "<div class='pic_wrapper'><img src='" + global.base_url + path + "'></div>";
+                    if ($(clicked_btn).data("note") === "old_note" && para == 0) {
+                        modal_html += "<p class='typhoon_note'>舉例說明，當颱風中心位於紅色區範圍以內時，臺北將有最大之風速值，其比值約30％至25％(V/Vmax)不等。例如颱風中心為100kt時，即100 ×30％，將出現30kt之風速。如颱風中心Vmax為90kt，即90×30％＝27kt。由圖可見，一般如7級風(28-33kt)半徑定為300公里(如圖)，即可見受臺灣之地形影響，臺北風力均為偏小。但亦有大風區(紅色區)在300公里暴風半徑以外者。例如，看「棕色區」之處，假如是大颱風造成之「沿山流」，「與寒潮冬季風共伴」，「大颱風環流」等，臺北即使在該300公里半徑之外，仍可經歷有強風，此可參見上所引述之文。</p>";
+                    }
+                }
+            });
+
+            if (data.match("#") !== null) {
+                img_note = img_content.split("#");
+                modal_html += "<h6 class='typhoon_note'>" + img_note[1] + "</h6>";
+            }
+        });
+
+        if ($(clicked_btn).data("note") === "note") {
+            modal_html += "<p class='typhoon_note'>上圖：侵臺自由過山颱風登陸及過境前後中心最低氣壓(hPa)與最大風速(kts)逐時變化圖。圖中颱風過山後距中心0.5緯度內之最大風速用實線表示，0.5~1.0緯度內之最大風速用斷點線表示，藉以示中心過山後風場結構變化，並參見圖中圖示。</p>";
+            modal_html += "<p class='typhoon_note'>下圖：侵臺颱風登陸及過境前後中心最大風速(kts)及離島三測站之風速逐時變化圖，並參見圖中圖示。</p>";
+        }
+
+        if ($(clicked_btn).data("note") === "new_note") {
+            modal_html += "<p class='typhoon_note'>此處各圖係根據1949-1996年共221個侵臺颱風各地時風力資料調製。</p>";
+        }
+
+        if ($(clicked_btn).data("note") === "rain_note") {
+            modal_html += "<p class='typhoon_note'>圖說：<br>圖中細實線箭頭為颱風24小時之移向及相當於3小時之移動距離，箭頭旁之數值為以各預測地點(如臺北)為中心地面圖中5個緯度距離內之氣壓梯度，箭頭旁之粗體數值為24小時之雨量值(毫米)，短橫線表示無雨量，與箭尾相連者為預測地點(如臺北)該日12z850mb之風向風速。若風速旁有小v者，則示該風向風速係取福州者以代替。細實線為等雨量線，細虛線為內插之中間值等雨量線，紅色粗虛線為最大雨量值之軸線。</p>";
+        }
+
+        $(this).find(".modal-body").html(modal_html);
+    });
+});
