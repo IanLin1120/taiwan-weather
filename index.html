@@ -216,6 +216,20 @@ body.tyOn #lyLoc{bottom:calc(var(--nav) + 162px)}body.tyOn #lyReload{bottom:calc
 .relR{display:flex;gap:10px;align-items:center;padding:10px 2px;border-bottom:1px dashed var(--line)}.relN{margin-top:3px;font-size:12px}
 .clB.ok{background:color-mix(in srgb,#5f9a5a 14%,var(--card,#f6eee2));border-color:#5f9a5a66}
 .tyBig.sm{width:40px;height:40px;font-size:22px;border-radius:12px}#tyRow .btn{padding:5px 8px;font-size:12.5px}
+/* 颱風列：狀態一行、按鈕一行平均分配，不再擠在一起 */
+#tyRow{flex-wrap:wrap;row-gap:6px}
+#tyRow #tySt{flex:1 1 100%;font-size:13.5px}
+#tyRow .btn{flex:1 1 0;min-width:0;justify-content:center;text-align:center;white-space:nowrap;padding:7px 4px;font-size:13px}
+body.tyOn #lyLoc{bottom:calc(var(--nav) + 196px)}body.tyOn #lyReload{bottom:calc(var(--nav) + 248px)}body.tyOn #lyView{bottom:calc(var(--nav) + 300px)}
+
+/* 歷年颱風 */
+.tyYrBar{display:flex;gap:8px;align-items:center;margin:6px 0 10px}.tyYrBar select{flex:1;min-width:0;padding:9px 10px;font-size:15px;font-weight:700;border-radius:12px}
+.tySum{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 8px}.tySum div{text-align:center;padding:8px 2px;border-radius:12px;background:color-mix(in srgb,var(--fg,#3b2f24) 5%,transparent)}
+.tySum b{display:block;font-size:19px}.tySum span{font-size:11px;color:var(--sub)}
+.tyHI{display:flex;gap:10px;align-items:center;padding:10px 2px;border-bottom:1px dashed var(--line);cursor:pointer}.tyHI .grow{min-width:0}
+.tyHN b{font-size:16px}.tyHN small{color:var(--sub);font-weight:600}.tyHI .sub{font-size:12.5px;margin-top:2px}
+.tyTags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.tyTags .tyTag{margin:0}.tyGo{font-size:22px;flex:none}
+.tyGrid .kv .v{word-break:break-word}
 </style>
 </head>
 <body class="liquid">
@@ -1801,6 +1815,7 @@ const TY={
     for(let i=0;i<=n;i++){const b=i/n*360;const r=R(b);const rad=b*Math.PI/180;c.push([lon+r*Math.sin(rad)*kx,lat+r*Math.cos(rad)*ky])}
     return {type:'Polygon',coordinates:[c]}},
   fmt(t){const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`},
+  fmtDate(t){const d=new Date(t);return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:00`},
   fmtD(t){const d=new Date(t);return `${d.getDate()}日${pad(d.getHours())}時`}
 };
 
@@ -1898,6 +1913,22 @@ const TYH={
     return R}
 };
 
+/* ================= 歷年颱風（中央氣象署颱風資料庫 → GitHub 每 6 小時整理成 JSON） ================= */
+const TYD={
+  base(){return GH.pages+'data/typhoon/'},
+  async index(){const c=lsGet('wx.tyidx',null);if(c&&Date.now()-c.at<3*3600e3)return c.v;
+    const v=await NET.json(this.base()+'index.json?t='+Math.floor(Date.now()/36e5),{timeout:20000});try{lsSet('wx.tyidx',{at:Date.now(),v})}catch(e){}return v},
+  async year(y){const k='wx.tyd.'+y,c=lsGet(k,null),cur=y>=new Date().getFullYear()-1;
+    if(c&&(!cur||Date.now()-c.at<3*3600e3))return c.v;
+    let v;try{v=await NET.json(this.base()+y+'.json?t='+Math.floor(Date.now()/36e5),{timeout:30000})}catch(e){if(c)return c.v;throw e}
+    v.storms=v.storms.map(s=>({...s,start:s.start?Date.parse(s.start.replace(' ','T')+'Z'):null,end:s.end?Date.parse(s.end.replace(' ','T')+'Z'):null,
+      track:(s.track||[]).map(p=>({time:Date.parse(p[0]),lat:p[1],lon:p[2],wind:p[3],p:p[4]}))}));
+    // 還在活動的颱風（官方歷史資料還沒有路徑）：用即時資料的路徑補上
+    try{const live=TY.d&&TY.d.list||[];for(const s of v.storms)if(!s.track.length){const l=live.find(c=>(c.en||'').toUpperCase()===(s.en||'').toUpperCase());if(l)s.track=l.past}}catch(e){}
+    try{lsSet(k,{at:Date.now(),v})}catch(e){}
+    return v}
+};
+
 /* ================= 颱風：地圖（2D／3D 動畫）與完整資訊 ================= */
 const TYV={
   srcs:['ty-cone','ty-past','ty-fc','ty-r70','ty-c15','ty-c25','ty-warn','ty-done'],
@@ -1955,27 +1986,41 @@ const TYV={
   /* 歷年颱風：選年份 → 列出當年所有颱風（官方定位路徑）→ 點一個在地圖上播放 */
   async years(){
     let el=$('#tySheet');if(!el){el=h('div',{id:'tySheet'});document.body.append(el)}
-    const Y=new Date().getFullYear();this.hy=this.hy||Y;
-    const draw=(body)=>{el.innerHTML=`<div class="plBg"></div><div class="plBox glass tyBox"><div class="lab"><span>📅 歷年颱風（官方路徑）</span><button class="btn sm" id="tyX">關閉</button></div>
-      <div class="chips" id="tyYr">${(this.yrs||[Y]).map(y=>`<button class="btn ${y===this.hy?'on':''}" data-y="${y}">${y}</button>`).join('')}</div><div id="tyHL">${body}</div>
-      <div class="sub" style="margin-top:10px">資料來源：中央氣象署颱風路徑（ExpTech 歷史備份）。只包含氣象署有發布路徑資料的熱帶氣旋；第一次查詢某一年需要下載較多資料，之後會記住。</div></div>`;
-      el.classList.add('on');$('#tyX').onclick=()=>el.classList.remove('on');el.querySelector('.plBg').onclick=()=>el.classList.remove('on');
-      $('#tyYr').onclick=e=>{const b=e.target.closest('[data-y]');if(!b)return;this.hy=+b.dataset.y;this.years()}};
-    draw('<div class="sub">讀取中…</div>');
-    try{const T=await TYH.times();const y0=new Date(T[0]*1000).getFullYear();this.yrs=[];for(let y=Y;y>=y0;y--)this.yrs.push(y)}catch(e){draw('<div class="sub">⚠️ 無法讀取歷史資料：'+esc(e.message)+'</div>');return}
-    draw('<div class="sub" id="tyHP">整理 '+this.hy+' 年資料中…</div>');
-    let R;try{R=await TYH.year(this.hy,(d,n)=>{const p=$('#tyHP');if(p)p.textContent=`整理 ${this.hy} 年資料中…（${d}/${n}）`})}catch(e){const x=$('#tyHL');if(x)x.innerHTML='<div class="sub">⚠️ '+esc(e.message)+'</div>';return}
-    const x=$('#tyHL');if(!x)return;
-    if(!R.storms.length){x.innerHTML=`<div class="sub">${R.note||this.hy+' 年沒有颱風資料'}</div>`;return}
-    x.innerHTML=`<div class="sub" style="margin:4px 0">${this.hy} 年共 ${R.storms.length} 個熱帶氣旋${R.partial?'（資料從 '+esc(R.partial)+' 開始）':''}</div>`+R.storms.map((st,i)=>{const [cn,col]=TY.cls(st.maxWind);
-      return `<div class="relR" data-i="${i}"><div class="tyBig sm" style="background:${col}">🌀</div><div class="grow"><b>${esc(st.name)}</b> <small class="sub">${esc(st.en||'')}</small>
-        <div class="sub">${st.tyNo?'第 '+esc(st.tyNo)+' 號・':''}${fmtMD(new Date(st.start))}～${fmtMD(new Date(st.end))}・最低 ${st.minP??'—'} hPa・最大 ${st.maxWind??'—'} m/s</div><span class="tyTag" style="background:${col}">${cn}</span></div><button class="btn sm pri">🗺</button></div>`}).join('');
-    x.querySelectorAll('[data-i]').forEach(r=>r.onclick=()=>{el.classList.remove('on');this.showHist(R.storms[+r.dataset.i])});
+    const Y=new Date().getFullYear();this.hy=this.hy||Y;this.hf=this.hf||'all';
+    el.innerHTML=`<div class="plBg"></div><div class="plBox glass tyBox"><div class="lab"><span>📅 歷年颱風</span><button class="btn sm" id="tyX">關閉</button></div>
+      <div class="tyYrBar"><select id="tyYrSel"><option>${this.hy}</option></select>
+        <div class="seg sm" id="tyHF"><button class="btn ${this.hf==='all'?'on':''}" data-f="all">全部</button><button class="btn ${this.hf==='warn'?'on':''}" data-f="warn">有發警報</button></div></div>
+      <div id="tyHL"><div class="sub">讀取中…</div></div>
+      <div class="sub" style="margin-top:12px;line-height:1.6">資料來源：<b>中央氣象署颱風資料庫</b>（颱風名稱、編號、生命期、最低氣壓、最大風速、暴風半徑、警報報數）；路徑為 IBTrACS 彙整的官方最佳路徑（日本氣象廳 RSMC 東京等），近兩年為暫定值。資料每 6 小時自動更新。</div></div>`;
+    el.classList.add('on');const close=()=>el.classList.remove('on');$('#tyX').onclick=close;el.querySelector('.plBg').onclick=close;
+    $('#tyHF').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;this.hf=b.dataset.f;$$('#tyHF .btn').forEach(x=>x.classList.toggle('on',x===b));this.yearList()};
+    try{const I=await TYD.index();const ys=Object.keys(I.years).map(Number).sort((a,b)=>b-a);if(!ys.includes(this.hy))this.hy=ys[0];
+      $('#tyYrSel').innerHTML=ys.map(y=>`<option value="${y}" ${y===this.hy?'selected':''}>${y} 年（${I.years[y].n} 個）</option>`).join('');
+      $('#tyYrSel').onchange=e=>{this.hy=+e.target.value;this.yearList()}}
+    catch(e){$('#tyHL').innerHTML='<div class="sub">⚠️ 無法讀取歷年颱風資料：'+esc(e.message)+'</div>';return}
+    this.yearList();
   },
+  async yearList(){
+    const x=$('#tyHL');if(!x)return;x.innerHTML='<div class="sub">讀取 '+this.hy+' 年資料中…</div>';
+    let R;try{R=await TYD.year(this.hy)}catch(e){x.innerHTML='<div class="sub">⚠️ '+esc(e.message)+'</div>';return}
+    if($('#tyHL')!==x)return;
+    const all=R.storms,L=this.hf==='warn'?all.filter(s=>s.warn):all;
+    const strong=all.filter(s=>(s.maxWind||0)>=51).length,mid=all.filter(s=>(s.maxWind||0)>=32.7&&(s.maxWind||0)<51).length;
+    x.innerHTML=`<div class="tySum"><div><b>${all.length}</b><span>颱風</span></div><div><b>${all.filter(s=>s.warn).length}</b><span>氣象署發警報</span></div><div><b>${strong}</b><span>強烈颱風</span></div><div><b>${mid}</b><span>中度颱風</span></div></div>`+
+      (L.length?L.map(st=>{const i=all.indexOf(st);const [cn,col]=TY.cls(st.maxWind);
+      return `<div class="tyHI" data-i="${i}"><div class="tyBig sm" style="background:${col}">🌀</div>
+        <div class="grow"><div class="tyHN"><b>${esc(st.name)}</b> <small>${esc(st.en||'')}</small></div>
+          <div class="sub">編號 ${esc(st.id)}・${st.start?TY.fmtDate(st.start):'—'} ～ ${st.end?TY.fmtDate(st.end):'持續中'}</div>
+          <div class="sub">最低 ${st.minP??'—'} hPa・最大風速 ${st.maxWind??'—'} m/s${st.r7?'・七級風半徑 '+st.r7+' km':''}</div>
+          <div class="tyTags"><span class="tyTag" style="background:${col}">${cn}</span>${st.warn?`<span class="tyTag" style="background:#c0562b">警報 ${st.warn} 報</span>`:''}${st.track.length?'':'<span class="tyTag" style="background:#9a8f80">路徑整理中</span>'}</div></div>
+        ${st.track.length?'<span class="tyGo">🗺</span>':''}</div>`}).join(''):'<div class="sub" style="padding:10px 0">這一年氣象署沒有發布颱風警報</div>');
+    x.querySelectorAll('[data-i]').forEach(r=>r.onclick=()=>{const st=all[+r.dataset.i];if(!st.track.length){this.histInfo(st);return}$('#tySheet').classList.remove('on');this.showHist(st)});
+  },
+  histInfo(st){toast(`${st.name}：官方路徑資料還沒整理好（通常 1～2 週內補上）`)},
   showHist(st){
-    const c={key:'h-'+st.key,name:st.name,en:st.en,year:st.year,tyNo:st.tyNo,tdNo:st.tdNo,past:st.track,fc:[],now:{},hist:true};c.cur=c.past[c.past.length-1];
-    this.hist=c;this.D={list:[c],src:'中央氣象署颱風路徑（ExpTech 歷史備份）',at:Date.now(),hist:true};this.sel=c;this.render();
-    toast(`${st.name}（${st.year}）歷史路徑，按 ▶ 播放`);
+    const c={key:'h-'+st.id,name:st.name,en:st.en,year:+String(st.id).slice(0,4),tyNo:String(st.id).slice(4),past:st.track,fc:[],now:{},hist:true,cwa:st};c.cur=c.past[c.past.length-1];
+    this.hist=c;this.D={list:[c],src:'中央氣象署颱風資料庫＋IBTrACS 官方最佳路徑',at:Date.now(),hist:true};this.sel=c;this.render();
+    toast(`${st.name}（${c.year}）路徑，按 ▶ 播放`);
   },
   fit(m){const c=this.sel;const b=new maplibregl.LngLatBounds();
     [...(c.hist?c.past:c.past.slice(-6)),...c.fc].forEach(p=>b.extend([p.lon,p.lat]));(c.cone||[]).forEach(p=>b.extend(p));b.extend([120.2,22]);b.extend([121.9,25.3]);
@@ -2035,7 +2080,7 @@ const TYV={
   sheet(){
     const D=this.D;if(!D||!D.list.length)return;const c=this.sel;const histMode=!!c.hist;
     let el=$('#tySheet');if(!el){el=h('div',{id:'tySheet'});document.body.append(el)}
-    const L=c.past[c.past.length-1]||c.fc[0];const [cn,col]=TY.cls(L.wind);const w=c.warn;
+    const L=c.past[c.past.length-1]||c.fc[0];const [cn,col]=TY.cls(c.cwa?c.cwa.maxWind:L.wind);const w=c.warn;
     const q=x=>x?`${Math.round(x.avg)} km<div class="sub">東北 ${x.ne??'—'}・東南 ${x.se??'—'}・西南 ${x.sw??'—'}・西北 ${x.nw??'—'} km</div>`:'—';
     const tw=TW.locate(L.lat,L.lon);
     const distTW=Math.round(kmDist(L.lat,L.lon,23.7,120.95));
@@ -2047,29 +2092,36 @@ const TYV={
         <span class="tyTag" style="background:${col}">${cn}</span>${w?` <span class="tyTag" style="background:${/陸上/.test(w.event||w.headline||'')?'#d23a37':'#e0893a'}">${esc(w.event||'颱風警報')}</span>`:''}</div></div>
       ${w&&w.headline?`<div class="tyWarn"><b>📢 ${esc(w.headline)}</b><div class="sub">${w.reportNo?'第 '+esc(w.reportNo)+' 報・':''}發布 ${w.sent?TY.fmt(w.sent):'—'}${w.expires?'・有效至 '+TY.fmt(w.expires):''}</div>
         ${w.areas&&w.areas.length?`<div style="margin-top:6px"><b>警戒區域：</b>${w.areas.map(esc).join('、')}</div>`:''}</div>`:''}
-      <h4>🏫 停班停課（官方公告）</h4><div id="tyClose">${CLOSE.html(Loc.get().county)}</div>
-      <div class="sub">來源：行政院人事行政總處${CLOSE.d&&CLOSE.d.updated?'・更新 '+esc(CLOSE.d.updated):''}　<a href="#" id="tyCloseWeb">開啟官方頁面</a></div>
-      <h4>${c.hist?'最後定位':'目前狀態'}（${TY.fmt(L.time)}）</h4>
+      ${c.hist?'':`<h4>🏫 停班停課（官方公告）</h4><div id="tyClose">${CLOSE.html(Loc.get().county)}</div>
+      <div class="sub">來源：行政院人事行政總處${CLOSE.d&&CLOSE.d.updated?'・更新 '+esc(CLOSE.d.updated):''}　<a href="#" id="tyCloseWeb">開啟官方頁面</a></div>`}
+      ${c.cwa?`<h4>氣象署颱風資料庫</h4><div class="tyGrid">
+        ${this.kv('颱風編號',esc(c.cwa.id))}${this.kv('生命期',(c.cwa.start?TY.fmtDate(c.cwa.start):'—')+'<div class="sub">至 '+(c.cwa.end?TY.fmtDate(c.cwa.end):'—')+'</div>')}
+        ${this.kv('中心最低氣壓',(c.cwa.minP??'—')+' hPa')}${this.kv('中心最大風速',(c.cwa.maxWind??'—')+' m/s',TY.cls(c.cwa.maxWind)[0])}
+        ${this.kv('最大陣風',(c.cwa.gust??'—')+' m/s')}${this.kv('警報報數',c.cwa.warn?c.cwa.warn+' 報':'未發警報')}
+        ${this.kv('最大七級風半徑',(c.cwa.r7??'—')+' km')}${this.kv('最大十級風半徑',(c.cwa.r10??'—')+' km')}</div>
+        <div class="acts"><button class="btn sm" id="tyTDB">🔗 氣象署颱風資料庫頁面</button></div>`:''}
+      ${c.hist?'':`<h4>${'目前狀態'}（${TY.fmt(L.time)}）</h4>
       <div class="tyGrid">
         ${this.kv('中心位置',`北緯 ${L.lat.toFixed(1)}°・東經 ${L.lon.toFixed(1)}°`,tw?'位於'+tw.county+tw.name:'距台灣中心約 '+distTW+' 公里')}
         ${this.kv('中心氣壓',(L.p??'—')+' hPa')}
         ${this.kv('近中心最大風速',(L.wind??'—')+' m/s',TY.bf(L.wind)+' 級風')}
         ${this.kv('瞬間最大陣風',(L.gust??'—')+' m/s',TY.bf(L.gust)+' 級風')}
-        ${this.kv('移動',`${TY.dir(c.now.dir)} ${c.now.spd??'—'} km/h`,c.now.move&&c.now.move[0]?esc(c.now.move[0]):'')}
-        ${this.kv('七級風暴風半徑',q(c.now.c15))}
-        ${this.kv('十級風暴風半徑',q(c.now.c25))}
-      </div>
+        ${c.hist?'':this.kv('移動',`${TY.dir(c.now.dir)} ${c.now.spd??'—'} km/h`,c.now.move&&c.now.move[0]?esc(c.now.move[0]):'')}
+        ${c.hist?'':this.kv('七級風暴風半徑',q(c.now.c15))}
+        ${c.hist?'':this.kv('十級風暴風半徑',q(c.now.c25))}
+      </div>`}
       ${c.fc.length?`<h4>官方預報路徑</h4><div class="tyTbl"><div class="tyTr th"><span>時間</span><span>位置</span><span>強度</span><span>氣壓</span><span>70%半徑</span></div>
         ${c.fc.map(f=>{const [n2,c2]=TY.cls(f.wind);return `<div class="tyTr"><span><b>${TY.fmtD(f.time)}</b><small>+${f.tau}h</small></span><span>${f.lat.toFixed(1)}N ${f.lon.toFixed(1)}E<small>${TY.dir(f.dir)} ${f.spd??''}${f.spd!=null?' km/h':''}</small></span><span><i style="background:${c2}"></i>${f.wind??'—'} m/s<small>${n2}</small></span><span>${f.p??'—'}</span><span>${f.r70??'—'} km</span></div>`+(f.state&&f.state[0]?`<div class="tyNote">${esc(f.state[0])}</div>`:'')}).join('')}</div>`:''}
       ${w&&w.sections&&w.sections.length?`<h4>警報內容</h4>${w.sections.map(s=>`<div class="tySec"><b>${esc(s.title)}</b><p>${esc(s.text).replace(/\n/g,'<br>')}</p></div>`).join('')}`:''}
-      ${c.past.length?`<h4>過去路徑</h4><div class="tyTbl">${c.past.slice(-12).reverse().map(p=>{const [n2,c2]=TY.cls(p.wind);return `<div class="tyTr"><span>${TY.fmt(p.time)}</span><span>${p.lat.toFixed(1)}N ${p.lon.toFixed(1)}E</span><span><i style="background:${c2}"></i>${p.wind??'—'} m/s</span><span>${p.p??'—'}</span><span></span></div>`}).join('')}</div>`:''}
+      ${c.past.length?`<h4>${c.hist?'路徑紀錄（每 6 小時）':'過去路徑'}</h4><div class="tyTbl">${(c.hist?c.past:c.past.slice(-12)).slice().reverse().map(p=>{const [n2,c2]=TY.cls(p.wind);return `<div class="tyTr"><span>${TY.fmt(p.time)}</span><span>${p.lat.toFixed(1)}N ${p.lon.toFixed(1)}E</span><span><i style="background:${c2}"></i>${p.wind??'—'} m/s</span><span>${p.p??'—'}</span><span></span></div>`}).join('')}</div>`:''}
       <div class="sub" style="margin-top:12px">資料來源：${esc(D.src)}・更新 ${D.updated?TY.fmt(D.updated):TY.fmt(D.at)}<br>黃色區域為官方「路徑潛勢預報」範圍；橘色圓圈為各預報點 70% 機率半徑。動畫的位置是在官方定位點之間平均內插，僅供示意。</div>
       <div class="acts"><button class="btn sm" id="tyWeb">🔗 氣象署颱風消息</button></div>
     </div>`;
     el.classList.add('on');
-    $('#tyCloseWeb').onclick=e=>{e.preventDefault();if(isApp)NAT.call('openUrl',CLOSE.URL);else window.open(CLOSE.URL,'_blank')};
-    if(!CLOSE.d||Date.now()-CLOSE.at>5*60e3)CLOSE.load().then(()=>{const x=$('#tyClose');if(x)x.innerHTML=CLOSE.html(Loc.get().county)}).catch(()=>{const x=$('#tyClose');if(x)x.innerHTML='<div class="sub">⚠️ 無法讀取人事行政總處公告'+(isApp?'':'（網頁版受瀏覽器限制，請用 APK 或點下方連結）')+'</div>'});
+    if($('#tyCloseWeb')&&!c.hist)$('#tyCloseWeb').onclick=e=>{e.preventDefault();if(isApp)NAT.call('openUrl',CLOSE.URL);else window.open(CLOSE.URL,'_blank')};
+    if(!c.hist&&!CLOSE.d||Date.now()-CLOSE.at>5*60e3)CLOSE.load().then(()=>{const x=$('#tyClose');if(x)x.innerHTML=CLOSE.html(Loc.get().county)}).catch(()=>{const x=$('#tyClose');if(x)x.innerHTML='<div class="sub">⚠️ 無法讀取人事行政總處公告'+(isApp?'':'（網頁版受瀏覽器限制，請用 APK 或點下方連結）')+'</div>'});
     $('#tyX').onclick=()=>el.classList.remove('on');el.querySelector('.plBg').onclick=()=>el.classList.remove('on');
+    if($('#tyTDB'))$('#tyTDB').onclick=()=>{const u='https://rdc28.cwa.gov.tw/TDB/public/typhoon_detail?typhoon_id='+c.cwa.id;if(isApp)NAT.call('openUrl',u);else window.open(u,'_blank')};
     $('#tyWeb').onclick=()=>{const u='https://www.cwa.gov.tw/V8/C/P/Typhoon/TY_NEWS.html';if(isApp)NAT.call('openUrl',u);else window.open(u,'_blank')};
     el.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{this.sel=D.list.find(x=>x.key===b.dataset.k);el.classList.remove('on');this.ML.prepTyphoon()});
   },
@@ -2270,7 +2322,7 @@ const Area={
    小改版（介面、功能調整）：開 App 時從 GitHub Pages 下載新的 index.html，直接套用，不用重裝 APK
    大改版（原生程式有改，version.json 的 minApk 大於手機上的 APK）：提示到 GitHub 下載新版 APK
    也可以在設定裡挑任一版本的 APK（最新或舊版）下載到手機安裝 */
-const APP_VER='1.6.1';
+const APP_VER='1.6.2';
 const GH={user:'IanLin1120',repo:'taiwan-weather',
   get pages(){return `https://${this.user.toLowerCase()}.github.io/${this.repo}/`},
   get web(){return `https://github.com/${this.user}/${this.repo}`},

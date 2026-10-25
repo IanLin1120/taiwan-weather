@@ -208,3 +208,17 @@ body.tyOn #lyLoc{bottom:calc(var(--nav) + 162px)}body.tyOn #lyReload{bottom:calc
 .relR{display:flex;gap:10px;align-items:center;padding:10px 2px;border-bottom:1px dashed var(--line)}.relN{margin-top:3px;font-size:12px}
 .clB.ok{background:color-mix(in srgb,#5f9a5a 14%,var(--card,#f6eee2));border-color:#5f9a5a66}
 .tyBig.sm{width:40px;height:40px;font-size:22px;border-radius:12px}#tyRow .btn{padding:5px 8px;font-size:12.5px}
+/* 颱風列：狀態一行、按鈕一行平均分配，不再擠在一起 */
+#tyRow{flex-wrap:wrap;row-gap:6px}
+#tyRow #tySt{flex:1 1 100%;font-size:13.5px}
+#tyRow .btn{flex:1 1 0;min-width:0;justify-content:center;text-align:center;white-space:nowrap;padding:7px 4px;font-size:13px}
+body.tyOn #lyLoc{bottom:calc(var(--nav) + 196px)}body.tyOn #lyReload{bottom:calc(var(--nav) + 248px)}body.tyOn #lyView{bottom:calc(var(--nav) + 300px)}
+
+/* 歷年颱風 */
+.tyYrBar{display:flex;gap:8px;align-items:center;margin:6px 0 10px}.tyYrBar select{flex:1;min-width:0;padding:9px 10px;font-size:15px;font-weight:700;border-radius:12px}
+.tySum{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 8px}.tySum div{text-align:center;padding:8px 2px;border-radius:12px;background:color-mix(in srgb,var(--fg,#3b2f24) 5%,transparent)}
+.tySum b{display:block;font-size:19px}.tySum span{font-size:11px;color:var(--sub)}
+.tyHI{display:flex;gap:10px;align-items:center;padding:10px 2px;border-bottom:1px dashed var(--line);cursor:pointer}.tyHI .grow{min-width:0}
+.tyHN b{font-size:16px}.tyHN small{color:var(--sub);font-weight:600}.tyHI .sub{font-size:12.5px;margin-top:2px}
+.tyTags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.tyTags .tyTag{margin:0}.tyGo{font-size:22px;flex:none}
+.tyGrid .kv .v{word-break:break-word}
