@@ -43,7 +43,7 @@ def ibtracs():
             season = int(r[ix['SEASON']])
         except Exception:
             continue
-        if season < 1958 or r[ix['TRACK_TYPE']] != 'main':
+        if season < 1958 or r[ix['TRACK_TYPE']].lower() not in ('main', 'provisional'):
             continue
         sid = r[ix['SID']]
         t = r[ix['ISO_TIME']]
