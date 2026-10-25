@@ -299,10 +299,31 @@ const TYV={
     const pop=`<b>${esc(c.name)}</b> ${esc(c.en||'')}<br>${TY.fmt(t)}（${p.fc?'預報':'實際'}）<br>${cn}・${p.wind!=null?Math.round(p.wind)+' m/s':''}<br>中心氣壓 ${p.p!=null?Math.round(p.p):'—'} hPa<br>暴風半徑約 ${Math.round(r15)} km`;
     if(!this.eye){this.eye=glMarker(m,p.lat,p.lon,`<div class="tyEye"><i></i></div>`,'',pop)}else{this.eye.setLngLat([p.lon,p.lat]);this.eye.getPopup()&&this.eye.getPopup().setHTML(pop)}
     this.eye.getElement().firstChild.style.setProperty('--tc',col);
-    // 3D 播放時鏡頭跟著颱風
-    if(this.ML.playing&&CFG.map3d&&this.follow!==false)m.easeTo({center:[p.lon,p.lat],duration:180,easing:x=>x});
     this.badge(p,t);
   },
+  /* 連續播放：用 requestAnimationFrame 讓時間平順前進（每秒約 6 小時），位置在定位點之間內插；鏡頭一路跟著颱風 */
+  play(){const ML=this.ML,m=ML.map,c=this.sel;if(!c)return;
+    const st=ML.steps;let t=(st[ML.ti]||st[0]).t;const t0=st[0].t,t1=st[st.length-1].t;if(t>=t1)t=t0;
+    const H=3600e3,speed=(t1-t0)>10*24*H?12*H:6*H;   // 很長的颱風播快一點
+    let last=performance.now(),lastUi=0,lastGeo=0;
+    // 先把鏡頭帶到颱風、拉近一點
+    const p0=TY.pos(c,t);if(p0)m.easeTo({center:[p0.lon,p0.lat],zoom:Math.max(m.getZoom(),CFG.map3d?5.6:5.2),pitch:CFG.map3d?55:0,duration:600});
+    const step=now=>{if(!ML.playing)return;const dt=Math.min(100,now-last);last=now;t+=dt/1000*speed;
+      if(t>t1){t=t1;this.frame(m,t,true);ML.stop();return}
+      const p=this.frame(m,t,now-lastGeo>45);if(now-lastGeo>45)lastGeo=now;
+      if(p)m.jumpTo({center:[p.lon,p.lat]});
+      if(now-lastUi>250){lastUi=now;const i=Math.round((t-t0)/(st[1]?st[1].t-st[0].t:H));ML.ti=Math.max(0,Math.min(st.length-1,i));$('#tlRange').value=ML.ti;$('#tlLabel').textContent=TY.fmt(t);$('#tlSub').textContent=c.hist?'歷史路徑':t<=((c.past[c.past.length-1]||{}).time||0)?'實際路徑':'預報'}
+      this._raf=requestAnimationFrame(step)};
+    setTimeout(()=>{last=performance.now();this._raf=requestAnimationFrame(step)},450)},
+  halt(){if(this._raf)cancelAnimationFrame(this._raf);this._raf=null},
+  /* 每一幀：颱風眼、雲系馬上動；暴風圈、走過的路徑每 ~45ms 更新一次（省電） */
+  frame(m,t,geo){const c=this.sel;const p=TY.pos(c,t);if(!p)return null;
+    const r15=p.r15||(c.now.c15&&c.now.c15.avg)||(c.cwa&&c.cwa.r7)||150;
+    WX3.moveStorm(m,p.lat,p.lon,r15*1.1);
+    if(this.eye){this.eye.setLngLat([p.lon,p.lat]);const [cn,col]=TY.cls(p.wind);this.eye.getElement().firstChild.style.setProperty('--tc',col)}
+    if(geo){this.set(m,'ty-c15',[this.poly(WX3.circle(p.lat,p.lon,r15))]);this.set(m,'ty-c25',[]);
+      const done=[...c.past,...c.fc].filter(q=>q.time<=t).map(q=>[q.lon,q.lat]);done.push([p.lon,p.lat]);this.set(m,'ty-done',done.length>1?[this.ln(done)]:[]);this.badge(p,t)}
+    return p},
   badge(p,t){const [cn,col]=TY.cls(p.wind);const r=this.row();
     $('#tySt').innerHTML=`<span class="tyTag" style="background:${col}">${cn}</span> <b>${esc(this.sel.name)}</b> ${p.wind!=null?Math.round(p.wind)+' m/s':''}${p.p!=null?'・'+Math.round(p.p)+' hPa':''}`;},
   row(){let r=$('#tyRow');const box=$('#tlBox');if(!r&&box){r=h('div',{id:'tyRow'},h('span',{id:'tySt',class:'grow'}),h('button',{id:'tyLive',class:'btn sm'},'↩ 即時'),h('button',{id:'tyYrB',class:'btn sm'},'📅 歷年'),h('button',{id:'tyCl',class:'btn sm'},'🏫 停班課'),h('button',{id:'tyBtn',class:'btn sm pri'},'🌀 詳細'));box.querySelector('.tlHead').after(r);$('#tyBtn').onclick=()=>this.sheet();$('#tyCl').onclick=()=>this.toggleClose();$('#tyYrB').onclick=()=>this.years();$('#tyLive').onclick=()=>{this.hist=null;this.prep(this.ML)}}return r},

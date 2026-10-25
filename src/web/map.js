@@ -44,7 +44,7 @@ const MapLayer={
   async init(){
     $('#lyChips').innerHTML=Object.entries(LAYERS).map(([k,v])=>`<button class="btn ${k===this.layer?'on':''}" data-l="${k}">${v.i} ${v.n}</button>`).join('');
     $('#lyChips').onclick=e=>{const b=e.target.closest('[data-l]');if(!b)return;$$('#lyChips .btn').forEach(x=>x.classList.toggle('on',x===b));this.setLayer(b.dataset.l)};
-    $('#tlRange').oninput=e=>this.show(+e.target.value);
+    $('#tlRange').oninput=e=>{if(this.playing)this.stop();this.show(+e.target.value)};
     $('#tlPlay').onclick=()=>this.play();
     $('#tlNow').onclick=()=>{this.stop();this.show(this.nowIdx||0)};
     $('#tlSub').textContent='地圖載入中…';
@@ -139,8 +139,9 @@ const MapLayer={
     $('#lyInfo').classList.remove('hide');
   },
   play(){if(this.playing)return this.stop();this.playing=true;$('#tlPlay').textContent='⏸';
+    if(this.layer==='typhoon'&&TYV.sel){TYV.play();return}
     const tick=()=>{if(!this.playing)return;let i=this.ti+1;if(i>=this.steps.length)i=0;this.show(i);this._pt=setTimeout(tick,this.layer==='radar'?750:this.layer==='typhoon'?170:1000)};tick()},
-  stop(){this.playing=false;clearTimeout(this._pt);$('#tlPlay').textContent='▶'}
+  stop(){this.playing=false;clearTimeout(this._pt);TYV.halt();$('#tlPlay').textContent='▶'}
 };
 
 /* ================= 風場粒子動畫（經緯度粒子，2D／3D 都會跟著透視） ================= */

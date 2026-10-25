@@ -230,6 +230,8 @@ body.tyOn #lyLoc{bottom:calc(var(--nav) + 196px)}body.tyOn #lyReload{bottom:calc
 .tyHN b{font-size:16px}.tyHN small{color:var(--sub);font-weight:600}.tyHI .sub{font-size:12.5px;margin-top:2px}
 .tyTags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.tyTags .tyTag{margin:0}.tyGo{font-size:22px;flex:none}
 .tyGrid .kv .v{word-break:break-word}
+#n_mode{display:flex;width:100%}#n_mode .btn{flex:1;padding:8px 4px;font-size:13px;white-space:nowrap}
+.nmd summary{cursor:pointer;font-size:13.5px;color:var(--ac);margin:6px 0}.nmr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}.nmr select{max-width:52%}
 </style>
 </head>
 <body class="liquid">
@@ -256,6 +258,7 @@ body.tyOn #lyLoc{bottom:calc(var(--nav) + 196px)}body.tyOn #lyReload{bottom:calc
 <!-- ② 預報通知 -->
 <section class="view" id="v-alert"><div class="scroll">
   <h2 class="pt">🔔 氣象預報通知</h2>
+  <div class="card glass" id="nc-mode"></div>
   <div class="card glass" id="nc-h3"></div>
   <div class="card glass" id="nc-today"></div>
   <div class="card glass" id="nc-week"></div>
@@ -432,6 +435,7 @@ const DEF={
     warn:{on:true},
     rain:{on:false,lead:10,interval:5,stop:true,wifiOnly:false,target:'gps'}
   },
+  notifMode:'sound',
   refresh:15,places:[],curPlace:''
 };
 function deepMerge(a,b){const o=Array.isArray(a)?[...a]:{...a};for(const k in b){o[k]=(b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k])&&a&&typeof a[k]==='object')?deepMerge(a[k],b[k]):b[k]}return o}
@@ -1404,7 +1408,8 @@ const CL={
     for(const c of rain){const n=c.n||6;for(let i=0;i<n;i++){const lon=c.lon+(Math.random()-.5)*c.d,lat=c.lat+(Math.random()-.5)*c.d;const q=maplibregl.MercatorCoordinate.fromLngLat([lon,lat]);R.push([q.x,q.y,c.top,Math.random(),.55+Math.random()*.5,c.col])}}
     S.rainArr=this.buildRain(R);
     S.boltArr=this.buildBolts(bolts);
-    S.storm=storm?{...storm,c:maplibregl.MercatorCoordinate.fromLngLat([storm.lon,storm.lat]),a:0,t:performance.now()}:null;
+    const ot=S.storm&&storm?S.storm.t:null;   // 半徑變了重建雲團時，旋轉角度接續，不會跳一下
+    S.storm=storm?{...storm,c:maplibregl.MercatorCoordinate.fromLngLat([storm.lon,storm.lat]),a:0,t:ot||performance.now()}:null;
     if(S.storm)S.stormPuffs=this.stormPuffs(storm);
     S.dirty=true;m.triggerRepaint();
   },
@@ -1426,7 +1431,7 @@ const CL={
   /* 颱風螺旋雲帶（極座標，渲染時旋轉） */
   /* 颱風移動：只換中心，旋轉不重來（動畫順暢）；半徑變很多才重建雲團 */
   moveStorm(m,st){const S=this.scene(m);const o=S.storm;
-    if(!o||Math.abs(o.r-st.r)/o.r>.2){this.set(m,{storm:st});return}
+    if(!o||Math.abs(o.r-st.r)/o.r>.12){this.set(m,{storm:st});return}
     o.lat=st.lat;o.lon=st.lon;o.c=maplibregl.MercatorCoordinate.fromLngLat([st.lon,st.lat]);m.triggerRepaint()},
   stormPuffs(st){const P=[],R=st.r*1000;let seed=3;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
     // 眼牆
@@ -1449,7 +1454,7 @@ const CL={
     const dark=document.documentElement.dataset.theme==='dark';
     // 颱風旋轉
     if(S.storm){const st=S.storm;const dt=(now-st.t)/1000;
-      S.stormLive=S.stormPuffs.map((p,i)=>{const a=p.a+dt*.12*(1.6-p.r/(st.r*1000));const dx=Math.cos(a)*p.r,dy=Math.sin(a)*p.r;const k=this.MZ;
+      S.stormLive=S.stormPuffs.map((p,i)=>{const a=p.a+dt*.55*(1.7-p.r/(st.r*1000));/* 逆時針旋轉（北半球），內圈較快 */const dx=Math.cos(a)*p.r,dy=Math.sin(a)*p.r;const k=this.MZ;
         return {x:st.c.x+dx*k,y:st.c.y-dy*k,z:p.alt,r:p.rad,s:p.s,a:p.al||.92,v:i%4}})}else S.stormLive=null;
     const key=M.join(',').slice(0,200)+S.ex;
     if(S.dirty||key!==S.key||S.storm){this.sortPuffs(S,M);S.key=key;S.dirty=false}
@@ -1634,7 +1639,7 @@ const MapLayer={
   async init(){
     $('#lyChips').innerHTML=Object.entries(LAYERS).map(([k,v])=>`<button class="btn ${k===this.layer?'on':''}" data-l="${k}">${v.i} ${v.n}</button>`).join('');
     $('#lyChips').onclick=e=>{const b=e.target.closest('[data-l]');if(!b)return;$$('#lyChips .btn').forEach(x=>x.classList.toggle('on',x===b));this.setLayer(b.dataset.l)};
-    $('#tlRange').oninput=e=>this.show(+e.target.value);
+    $('#tlRange').oninput=e=>{if(this.playing)this.stop();this.show(+e.target.value)};
     $('#tlPlay').onclick=()=>this.play();
     $('#tlNow').onclick=()=>{this.stop();this.show(this.nowIdx||0)};
     $('#tlSub').textContent='地圖載入中…';
@@ -1729,8 +1734,9 @@ const MapLayer={
     $('#lyInfo').classList.remove('hide');
   },
   play(){if(this.playing)return this.stop();this.playing=true;$('#tlPlay').textContent='⏸';
+    if(this.layer==='typhoon'&&TYV.sel){TYV.play();return}
     const tick=()=>{if(!this.playing)return;let i=this.ti+1;if(i>=this.steps.length)i=0;this.show(i);this._pt=setTimeout(tick,this.layer==='radar'?750:this.layer==='typhoon'?170:1000)};tick()},
-  stop(){this.playing=false;clearTimeout(this._pt);$('#tlPlay').textContent='▶'}
+  stop(){this.playing=false;clearTimeout(this._pt);TYV.halt();$('#tlPlay').textContent='▶'}
 };
 
 /* ================= 風場粒子動畫（經緯度粒子，2D／3D 都會跟著透視） ================= */
@@ -2058,10 +2064,31 @@ const TYV={
     const pop=`<b>${esc(c.name)}</b> ${esc(c.en||'')}<br>${TY.fmt(t)}（${p.fc?'預報':'實際'}）<br>${cn}・${p.wind!=null?Math.round(p.wind)+' m/s':''}<br>中心氣壓 ${p.p!=null?Math.round(p.p):'—'} hPa<br>暴風半徑約 ${Math.round(r15)} km`;
     if(!this.eye){this.eye=glMarker(m,p.lat,p.lon,`<div class="tyEye"><i></i></div>`,'',pop)}else{this.eye.setLngLat([p.lon,p.lat]);this.eye.getPopup()&&this.eye.getPopup().setHTML(pop)}
     this.eye.getElement().firstChild.style.setProperty('--tc',col);
-    // 3D 播放時鏡頭跟著颱風
-    if(this.ML.playing&&CFG.map3d&&this.follow!==false)m.easeTo({center:[p.lon,p.lat],duration:180,easing:x=>x});
     this.badge(p,t);
   },
+  /* 連續播放：用 requestAnimationFrame 讓時間平順前進（每秒約 6 小時），位置在定位點之間內插；鏡頭一路跟著颱風 */
+  play(){const ML=this.ML,m=ML.map,c=this.sel;if(!c)return;
+    const st=ML.steps;let t=(st[ML.ti]||st[0]).t;const t0=st[0].t,t1=st[st.length-1].t;if(t>=t1)t=t0;
+    const H=3600e3,speed=(t1-t0)>10*24*H?12*H:6*H;   // 很長的颱風播快一點
+    let last=performance.now(),lastUi=0,lastGeo=0;
+    // 先把鏡頭帶到颱風、拉近一點
+    const p0=TY.pos(c,t);if(p0)m.easeTo({center:[p0.lon,p0.lat],zoom:Math.max(m.getZoom(),CFG.map3d?5.6:5.2),pitch:CFG.map3d?55:0,duration:600});
+    const step=now=>{if(!ML.playing)return;const dt=Math.min(100,now-last);last=now;t+=dt/1000*speed;
+      if(t>t1){t=t1;this.frame(m,t,true);ML.stop();return}
+      const p=this.frame(m,t,now-lastGeo>45);if(now-lastGeo>45)lastGeo=now;
+      if(p)m.jumpTo({center:[p.lon,p.lat]});
+      if(now-lastUi>250){lastUi=now;const i=Math.round((t-t0)/(st[1]?st[1].t-st[0].t:H));ML.ti=Math.max(0,Math.min(st.length-1,i));$('#tlRange').value=ML.ti;$('#tlLabel').textContent=TY.fmt(t);$('#tlSub').textContent=c.hist?'歷史路徑':t<=((c.past[c.past.length-1]||{}).time||0)?'實際路徑':'預報'}
+      this._raf=requestAnimationFrame(step)};
+    setTimeout(()=>{last=performance.now();this._raf=requestAnimationFrame(step)},450)},
+  halt(){if(this._raf)cancelAnimationFrame(this._raf);this._raf=null},
+  /* 每一幀：颱風眼、雲系馬上動；暴風圈、走過的路徑每 ~45ms 更新一次（省電） */
+  frame(m,t,geo){const c=this.sel;const p=TY.pos(c,t);if(!p)return null;
+    const r15=p.r15||(c.now.c15&&c.now.c15.avg)||(c.cwa&&c.cwa.r7)||150;
+    WX3.moveStorm(m,p.lat,p.lon,r15*1.1);
+    if(this.eye){this.eye.setLngLat([p.lon,p.lat]);const [cn,col]=TY.cls(p.wind);this.eye.getElement().firstChild.style.setProperty('--tc',col)}
+    if(geo){this.set(m,'ty-c15',[this.poly(WX3.circle(p.lat,p.lon,r15))]);this.set(m,'ty-c25',[]);
+      const done=[...c.past,...c.fc].filter(q=>q.time<=t).map(q=>[q.lon,q.lat]);done.push([p.lon,p.lat]);this.set(m,'ty-done',done.length>1?[this.ln(done)]:[]);this.badge(p,t)}
+    return p},
   badge(p,t){const [cn,col]=TY.cls(p.wind);const r=this.row();
     $('#tySt').innerHTML=`<span class="tyTag" style="background:${col}">${cn}</span> <b>${esc(this.sel.name)}</b> ${p.wind!=null?Math.round(p.wind)+' m/s':''}${p.p!=null?'・'+Math.round(p.p)+' hPa':''}`;},
   row(){let r=$('#tyRow');const box=$('#tlBox');if(!r&&box){r=h('div',{id:'tyRow'},h('span',{id:'tySt',class:'grow'}),h('button',{id:'tyLive',class:'btn sm'},'↩ 即時'),h('button',{id:'tyYrB',class:'btn sm'},'📅 歷年'),h('button',{id:'tyCl',class:'btn sm'},'🏫 停班課'),h('button',{id:'tyBtn',class:'btn sm pri'},'🌀 詳細'));box.querySelector('.tlHead').after(r);$('#tyBtn').onclick=()=>this.sheet();$('#tyCl').onclick=()=>this.toggleClose();$('#tyYrB').onclick=()=>this.years();$('#tyLive').onclick=()=>{this.hist=null;this.prep(this.ML)}}return r},
@@ -2164,6 +2191,16 @@ const Alerts={
   sw(id,on){return `<label class="sw"><input type="checkbox" id="${id}" ${on?'checked':''}><span></span></label>`},
   render(){
     const N=CFG.notif,d=this.digest;
+    const MODES=[['sound','🔔 鈴聲＋震動'],['vibrate','📳 只震動'],['silent','🔕 只顯示']];
+    const kinds=[['h3','⏱ 未來三小時'],['today','☀️ 今日天氣'],['week','📆 一週天氣'],['rain','☔ 即時降雨'],['warn','⚠️ 警特報']];
+    $('#nc-mode').innerHTML=`<h3>🔔 通知方式</h3>
+      <div class="seg nm" id="n_mode">${MODES.map(([v,n])=>`<button class="btn ${CFG.notifMode===v?'on':''}" data-m="${v}">${n}</button>`).join('')}</div>
+      <div class="sub" style="margin:6px 0 4px">所有通知預設用這個方式；也可以每一種分開設定。手機切到震動模式時只會震動、靜音模式時只顯示。</div>
+      <details class="nmd"><summary>分開設定每一種通知</summary>${kinds.map(([k,n])=>`<div class="nmr"><span>${n}</span><select data-k="${k}"><option value="">跟隨預設</option>${MODES.map(([v,t])=>`<option value="${v}" ${N[k].mode===v?'selected':''}>${t}</option>`).join('')}</select></div>`).join('')}</details>
+      ${isApp?'<div class="acts"><button class="btn sm" id="n_mtest">🔔 試試看</button></div>':''}`;
+    $('#n_mode').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;CFG.notifMode=b.dataset.m;saveCfg();this.applyNative();$$('#n_mode .btn').forEach(x=>x.classList.toggle('on',x===b));toast('所有通知：'+b.textContent.trim())};
+    $$('#nc-mode select[data-k]').forEach(el=>el.onchange=()=>{N[el.dataset.k].mode=el.value;saveCfg();this.applyNative()});
+    if($('#n_mtest'))$('#n_mtest').onclick=async()=>{if(!(await this.ensurePerm()))return;this.send('🔔 通知測試','這是目前設定的通知方式：'+(MODES.find(m=>m[0]===CFG.notifMode)||MODES[0])[1].slice(2),'today')};
     const pv=x=>x?`<div class="npv"><b>${esc(x.title)}</b>${esc(x.body)}</div>`:'<div class="npv sub">資料載入後顯示預覽…</div>';
     $('#nc-h3').innerHTML=`<div class="lab"><span>⏱ 未來三小時天氣</span>${this.sw('n_h3',N.h3.on)}</div>
       <div class="row"><span class="sub">推播頻率</span><div class="seg" id="n_h3e">${[1,2,3].map(v=>`<button class="btn ${N.h3.every==v?'on':''}" data-v="${v}">每 ${v} 小時</button>`).join('')}</div></div>
@@ -2322,7 +2359,7 @@ const Area={
    小改版（介面、功能調整）：開 App 時從 GitHub Pages 下載新的 index.html，直接套用，不用重裝 APK
    大改版（原生程式有改，version.json 的 minApk 大於手機上的 APK）：提示到 GitHub 下載新版 APK
    也可以在設定裡挑任一版本的 APK（最新或舊版）下載到手機安裝 */
-const APP_VER='1.6.2';
+const APP_VER='1.7.0';
 const GH={user:'IanLin1120',repo:'taiwan-weather',
   get pages(){return `https://${this.user.toLowerCase()}.github.io/${this.repo}/`},
   get web(){return `https://github.com/${this.user}/${this.repo}`},

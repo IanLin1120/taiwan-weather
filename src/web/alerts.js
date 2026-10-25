@@ -34,6 +34,16 @@ const Alerts={
   sw(id,on){return `<label class="sw"><input type="checkbox" id="${id}" ${on?'checked':''}><span></span></label>`},
   render(){
     const N=CFG.notif,d=this.digest;
+    const MODES=[['sound','🔔 鈴聲＋震動'],['vibrate','📳 只震動'],['silent','🔕 只顯示']];
+    const kinds=[['h3','⏱ 未來三小時'],['today','☀️ 今日天氣'],['week','📆 一週天氣'],['rain','☔ 即時降雨'],['warn','⚠️ 警特報']];
+    $('#nc-mode').innerHTML=`<h3>🔔 通知方式</h3>
+      <div class="seg nm" id="n_mode">${MODES.map(([v,n])=>`<button class="btn ${CFG.notifMode===v?'on':''}" data-m="${v}">${n}</button>`).join('')}</div>
+      <div class="sub" style="margin:6px 0 4px">所有通知預設用這個方式；也可以每一種分開設定。手機切到震動模式時只會震動、靜音模式時只顯示。</div>
+      <details class="nmd"><summary>分開設定每一種通知</summary>${kinds.map(([k,n])=>`<div class="nmr"><span>${n}</span><select data-k="${k}"><option value="">跟隨預設</option>${MODES.map(([v,t])=>`<option value="${v}" ${N[k].mode===v?'selected':''}>${t}</option>`).join('')}</select></div>`).join('')}</details>
+      ${isApp?'<div class="acts"><button class="btn sm" id="n_mtest">🔔 試試看</button></div>':''}`;
+    $('#n_mode').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;CFG.notifMode=b.dataset.m;saveCfg();this.applyNative();$$('#n_mode .btn').forEach(x=>x.classList.toggle('on',x===b));toast('所有通知：'+b.textContent.trim())};
+    $$('#nc-mode select[data-k]').forEach(el=>el.onchange=()=>{N[el.dataset.k].mode=el.value;saveCfg();this.applyNative()});
+    if($('#n_mtest'))$('#n_mtest').onclick=async()=>{if(!(await this.ensurePerm()))return;this.send('🔔 通知測試','這是目前設定的通知方式：'+(MODES.find(m=>m[0]===CFG.notifMode)||MODES[0])[1].slice(2),'today')};
     const pv=x=>x?`<div class="npv"><b>${esc(x.title)}</b>${esc(x.body)}</div>`:'<div class="npv sub">資料載入後顯示預覽…</div>';
     $('#nc-h3').innerHTML=`<div class="lab"><span>⏱ 未來三小時天氣</span>${this.sw('n_h3',N.h3.on)}</div>
       <div class="row"><span class="sub">推播頻率</span><div class="seg" id="n_h3e">${[1,2,3].map(v=>`<button class="btn ${N.h3.every==v?'on':''}" data-v="${v}">每 ${v} 小時</button>`).join('')}</div></div>

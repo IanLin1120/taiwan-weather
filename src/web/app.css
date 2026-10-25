@@ -222,3 +222,5 @@ body.tyOn #lyLoc{bottom:calc(var(--nav) + 196px)}body.tyOn #lyReload{bottom:calc
 .tyHN b{font-size:16px}.tyHN small{color:var(--sub);font-weight:600}.tyHI .sub{font-size:12.5px;margin-top:2px}
 .tyTags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.tyTags .tyTag{margin:0}.tyGo{font-size:22px;flex:none}
 .tyGrid .kv .v{word-break:break-word}
+#n_mode{display:flex;width:100%}#n_mode .btn{flex:1;padding:8px 4px;font-size:13px;white-space:nowrap}
+.nmd summary{cursor:pointer;font-size:13.5px;color:var(--ac);margin:6px 0}.nmr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}.nmr select{max-width:52%}

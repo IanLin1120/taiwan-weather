@@ -60,7 +60,8 @@ const CL={
     for(const c of rain){const n=c.n||6;for(let i=0;i<n;i++){const lon=c.lon+(Math.random()-.5)*c.d,lat=c.lat+(Math.random()-.5)*c.d;const q=maplibregl.MercatorCoordinate.fromLngLat([lon,lat]);R.push([q.x,q.y,c.top,Math.random(),.55+Math.random()*.5,c.col])}}
     S.rainArr=this.buildRain(R);
     S.boltArr=this.buildBolts(bolts);
-    S.storm=storm?{...storm,c:maplibregl.MercatorCoordinate.fromLngLat([storm.lon,storm.lat]),a:0,t:performance.now()}:null;
+    const ot=S.storm&&storm?S.storm.t:null;   // 半徑變了重建雲團時，旋轉角度接續，不會跳一下
+    S.storm=storm?{...storm,c:maplibregl.MercatorCoordinate.fromLngLat([storm.lon,storm.lat]),a:0,t:ot||performance.now()}:null;
     if(S.storm)S.stormPuffs=this.stormPuffs(storm);
     S.dirty=true;m.triggerRepaint();
   },
@@ -82,7 +83,7 @@ const CL={
   /* 颱風螺旋雲帶（極座標，渲染時旋轉） */
   /* 颱風移動：只換中心，旋轉不重來（動畫順暢）；半徑變很多才重建雲團 */
   moveStorm(m,st){const S=this.scene(m);const o=S.storm;
-    if(!o||Math.abs(o.r-st.r)/o.r>.2){this.set(m,{storm:st});return}
+    if(!o||Math.abs(o.r-st.r)/o.r>.12){this.set(m,{storm:st});return}
     o.lat=st.lat;o.lon=st.lon;o.c=maplibregl.MercatorCoordinate.fromLngLat([st.lon,st.lat]);m.triggerRepaint()},
   stormPuffs(st){const P=[],R=st.r*1000;let seed=3;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
     // 眼牆
@@ -105,7 +106,7 @@ const CL={
     const dark=document.documentElement.dataset.theme==='dark';
     // 颱風旋轉
     if(S.storm){const st=S.storm;const dt=(now-st.t)/1000;
-      S.stormLive=S.stormPuffs.map((p,i)=>{const a=p.a+dt*.12*(1.6-p.r/(st.r*1000));const dx=Math.cos(a)*p.r,dy=Math.sin(a)*p.r;const k=this.MZ;
+      S.stormLive=S.stormPuffs.map((p,i)=>{const a=p.a+dt*.55*(1.7-p.r/(st.r*1000));/* 逆時針旋轉（北半球），內圈較快 */const dx=Math.cos(a)*p.r,dy=Math.sin(a)*p.r;const k=this.MZ;
         return {x:st.c.x+dx*k,y:st.c.y-dy*k,z:p.alt,r:p.rad,s:p.s,a:p.al||.92,v:i%4}})}else S.stormLive=null;
     const key=M.join(',').slice(0,200)+S.ex;
     if(S.dirty||key!==S.key||S.storm){this.sortPuffs(S,M);S.key=key;S.dirty=false}

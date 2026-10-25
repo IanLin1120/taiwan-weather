@@ -28,6 +28,7 @@ const DEF={
     warn:{on:true},
     rain:{on:false,lead:10,interval:5,stop:true,wifiOnly:false,target:'gps'}
   },
+  notifMode:'sound',
   refresh:15,places:[],curPlace:''
 };
 function deepMerge(a,b){const o=Array.isArray(a)?[...a]:{...a};for(const k in b){o[k]=(b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k])&&a&&typeof a[k]==='object')?deepMerge(a[k],b[k]):b[k]}return o}
