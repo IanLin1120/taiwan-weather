@@ -38,26 +38,20 @@ def ibtracs():
     head = next(rd); next(rd)
     ix = {k: i for i, k in enumerate(head)}
     S = {}
-    dbg = {'types': {}, 'rows': []}
     for r in rd:
-        try:
-            tt = r[ix['TRACK_TYPE']]; dbg['types'][tt] = dbg['types'].get(tt, 0) + 1
-            if (r[ix['SEASON']] in ('2025',) and len(dbg['rows']) < 6) or r[ix['NAME']] in ('NOKAEN', 'NOLO', 'PENHA'):
-                if len(dbg['rows']) < 40: dbg['rows'].append(r[:16])
-        except Exception: pass
         try:
             season = int(r[ix['SEASON']])
         except Exception:
             continue
-        if season < 1958 or r[ix['TRACK_TYPE']].lower() not in ('main', 'provisional'):
+        if season < 1958 or r[ix['TRACK_TYPE']].lower() not in ('main', 'provisional', 'us-provisional'):
             continue
         sid = r[ix['SID']]
         t = r[ix['ISO_TIME']]
         hh = t[11:13]
         lat = num(r[ix['TOKYO_LAT']]) if r[ix['TOKYO_LAT']].strip() else num(r[ix['LAT']])
         lon = num(r[ix['TOKYO_LON']]) if r[ix['TOKYO_LON']].strip() else num(r[ix['LON']])
-        if lat is None or lon is None:
-            continue
+        if lat is None or lon is None or not (90 <= lon <= 185):
+            continue   # 只保留西北太平洋範圍內的點
         w = num(r[ix['TOKYO_WIND']]);
         if w is not None: w = round(w * 0.5144, 1)          # 10 分鐘平均（kt → m/s）
         else:
@@ -66,7 +60,6 @@ def ibtracs():
         s = S.setdefault(sid, {'sid': sid, 'season': season, 'name': r[ix['NAME']], 'pts': []})
         s['pts'].append((t, hh, lat, lon, w, p))
     print('IBTrACS 颱風數', len(S), flush=True)
-    os.makedirs(OUT, exist_ok=True); json.dump(dbg, open(OUT + '_debug.json', 'w'), ensure_ascii=False)
     return S
 
 def main():
@@ -96,8 +89,10 @@ def main():
         # 對應 IBTrACS 路徑：同年同英文名；同名多個時取時間最接近生成時間的
         cand = by.get((y, norm(en)), []) + by.get((y - 1, norm(en)), [])
         best = None
+        gt = g[:10] if g else None
+        if gt:   # 同名颱風：生成時間要在 ±25 天內
+            cand = [c for c in cand if abs((datetime.date.fromisoformat(c['pts'][0][0][:10]) - datetime.date.fromisoformat(gt)).days) <= 25]
         if cand:
-            gt = g[:10] if g else None
             best = min(cand, key=lambda s: abs((datetime.date.fromisoformat(s['pts'][0][0][:10]) - datetime.date.fromisoformat(gt)).days) if gt else 0)
         if best:
             tr = [p for p in best['pts'] if p[1] in ('00', '06', '12', '18')] or best['pts']
