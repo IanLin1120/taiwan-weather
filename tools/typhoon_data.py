@@ -38,7 +38,13 @@ def ibtracs():
     head = next(rd); next(rd)
     ix = {k: i for i, k in enumerate(head)}
     S = {}
+    dbg = {'types': {}, 'rows': []}
     for r in rd:
+        try:
+            tt = r[ix['TRACK_TYPE']]; dbg['types'][tt] = dbg['types'].get(tt, 0) + 1
+            if (r[ix['SEASON']] in ('2025',) and len(dbg['rows']) < 6) or r[ix['NAME']] in ('NOKAEN', 'NOLO', 'PENHA'):
+                if len(dbg['rows']) < 40: dbg['rows'].append(r[:16])
+        except Exception: pass
         try:
             season = int(r[ix['SEASON']])
         except Exception:
@@ -60,6 +66,7 @@ def ibtracs():
         s = S.setdefault(sid, {'sid': sid, 'season': season, 'name': r[ix['NAME']], 'pts': []})
         s['pts'].append((t, hh, lat, lon, w, p))
     print('IBTrACS 颱風數', len(S), flush=True)
+    os.makedirs(OUT, exist_ok=True); json.dump(dbg, open(OUT + '_debug.json', 'w'), ensure_ascii=False)
     return S
 
 def main():
