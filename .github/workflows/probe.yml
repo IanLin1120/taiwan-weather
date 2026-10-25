@@ -1,0 +1,32 @@
+name: probe
+on:
+  push:
+    branches: [data-probe]
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: fetch
+        run: |
+          mkdir -p out
+          UA="Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36"
+          curl -sSL -A "$UA" -m 60 -D out/tl.h https://rdc28.cwa.gov.tw/TDB/public/typhoon_list/ -o out/typhoon_list.html || true
+          curl -sSL -A "$UA" -m 60 https://rdc28.cwa.gov.tw/TDB/public/warning_typhoon_list/ -o out/warning_list.html || true
+          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' out/typhoon_list.html | sed -E 's/^src="//;s/"$//' | head -20); do
+            case "$js" in http*) u="$js";; /*) u="https://rdc28.cwa.gov.tw$js";; *) u="https://rdc28.cwa.gov.tw/TDB/public/typhoon_list/$js";; esac
+            n=$(echo "$js" | tr '/?=&' '____'); curl -sSL -A "$UA" -m 60 "$u" -o "out/js_$n" || true
+          done
+          curl -sSL -m 180 https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.WP.list.v04r01.csv -o /tmp/wp.csv || true
+          ls -la /tmp/wp.csv > out/ibtracs_info.txt 2>&1; head -3 /tmp/wp.csv >> out/ibtracs_info.txt; grep -c "^" /tmp/wp.csv >> out/ibtracs_info.txt
+          grep ',2026,' /tmp/wp.csv | awk -F, '{print $1","$6","$7}' | sort -u > out/ibtracs_2026.txt || true
+          grep ',2025,' /tmp/wp.csv | awk -F, '{print $1","$6","$7}' | sort -u > out/ibtracs_2025.txt || true
+          curl -sSL -m 60 -o /tmp/bst.zip https://www.jma.go.jp/jma/jma-eng/jma-center/rsmc-hp-pub-eg/Besttracks/bst_all.zip || true; ls -la /tmp/bst.zip > out/jma_info.txt 2>&1; (cd /tmp && unzip -o -q bst.zip && head -3 bst_all.txt && grep '^66666' bst_all.txt | tail -5) >> out/jma_info.txt 2>&1 || true
+          ls -la out
+      - name: save
+        run: |
+          git config user.name github-actions; git config user.email actions@github.com
+          git checkout -b probe-out
+          git add out; git commit -qm "probe output"; git push -f origin probe-out
