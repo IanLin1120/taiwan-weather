@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light" data-acc="terra">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#efe5d3">
+<title>台灣即時天氣預報</title>
+<style>/*@@GL_CSS@@*/</style>
+<style>/*@@APP_CSS@@*/</style>
+</head>
+<body class="liquid">
+
+<!-- ① 天氣圖層 -->
+<section class="view" id="v-map">
+  <div id="lyMap" class="mapbox"></div>
+  <canvas id="windCv"></canvas>
+  <div id="lyTop" class="glass">
+    <div class="lyChips" id="lyChips"></div>
+  </div>
+  <div id="lyLegend" class="glass"></div>
+  <div id="lyInfo" class="glass hide"></div>
+  <div id="tlBox" class="glass">
+    <div class="tlHead"><button class="btn sm" id="tlPlay">▶</button><b id="tlLabel">現在</b><span class="sub grow" id="tlSub"></span><button class="btn sm" id="tlNow">現在</button></div>
+    <input type="range" id="tlRange" min="0" max="48" value="0" step="1">
+    <div class="tlTicks" id="tlTicks"></div>
+  </div>
+  <div class="fab glass" id="lyLoc" title="定位">📍</div>
+  <div class="fab glass" id="lyReload" title="重新整理">⟳</div>
+  <div class="fab glass" id="lyView" title="2D／3D"></div>
+</section>
+
+<!-- ② 預報通知 -->
+<section class="view" id="v-alert"><div class="scroll">
+  <h2 class="pt">🔔 氣象預報通知</h2>
+  <div class="card glass" id="nc-h3"></div>
+  <div class="card glass" id="nc-today"></div>
+  <div class="card glass" id="nc-week"></div>
+  <div class="card glass" id="nc-more"></div>
+  <div class="card glass"><h3>🗂 通知紀錄</h3><div id="nHist"></div></div>
+</div></section>
+
+<!-- ③ 今天(主畫面) -->
+<section class="view on" id="v-home"><div class="scroll">
+  <div id="hHead">
+    <div class="grow"><div id="hPlace">定位中…</div><div class="sub" id="hUpd">—</div></div>
+    <button class="btn sm" id="hLocBtn">📍</button>
+    <button class="btn sm" id="hTheme" title="切換明暗">🌓</button>
+  </div>
+  <div id="hPlaces"></div>
+  <div id="hWarn"></div>
+  <div class="card glass" id="hNowCard">
+    <div id="hNow">
+      <div class="nowL">
+        <div id="hIcon">⛅</div>
+        <div><div id="hTemp">--°</div><div id="hDesc">—</div><div class="sub" id="hFeel">—</div></div>
+      </div>
+      <div class="nowR" id="hHiLo"></div>
+    </div>
+    <div id="hNowcast" class="nowcast"></div>
+  </div>
+  <div class="card glass" id="hDress">
+    <h3>👕 今天怎麼穿</h3>
+    <div class="dressWrap">
+      <div id="avatar"></div>
+      <div id="dressTips"></div>
+    </div>
+  </div>
+  <div class="card glass"><h3>⏱ 逐時預報</h3><div id="hHourly" class="hstrip"></div></div>
+  <div class="card glass"><h3>📋 今日指標</h3><div id="hGrid" class="kgrid"></div></div>
+  <div class="card glass"><h3>📆 一週</h3><div id="hWeek"></div></div>
+  <div class="srcNote sub" id="hSrc"></div>
+</div></section>
+
+<!-- ④ 區域即時雨況 -->
+<section class="view" id="v-area">
+  <div id="arMap" class="mapbox"></div>
+  <div id="arTop" class="glass">
+    <div class="arSel">
+      <select id="arCounty"></select><select id="arTown"></select>
+      <button class="btn sm" id="arGps" title="定位">📍</button>
+      <button class="btn sm" id="arView" title="2D／3D"></button>
+    </div>
+    <div class="chips" id="arMode"></div>
+  </div>
+  <div id="arPanel" class="glass">
+    <div class="arGrab" id="arGrab"></div>
+    <div id="arStatus"></div>
+    <div class="tlHead"><button class="btn sm" id="arPlay">▶</button><b id="arTl">—</b><span class="grow"></span><span class="sub" id="arTlSub"></span></div>
+    <input type="range" id="arRange" min="0" max="0" value="0" step="1">
+    <div id="arChart"></div>
+    <div id="arWatch"></div>
+  </div>
+</section>
+
+<!-- ⑤ 設定 -->
+<section class="view" id="v-set"><div class="scroll">
+  <h2 class="pt">⚙️ 設定</h2>
+  <div class="card glass" id="sKeys"></div>
+  <div class="card glass" id="sPerm"></div>
+  <div class="card glass" id="sLoc"></div>
+  <div class="card glass" id="sLook"></div>
+  <div class="card glass" id="sMe"></div>
+  <div class="card glass" id="sData"></div>
+  <div class="card glass" id="sUpd"></div>
+  <div class="card glass" id="sAbout"></div>
+</div></section>
+
+<nav id="nav" class="glass">
+  <button class="btn" data-v="v-map"><i>🗺</i>圖層</button>
+  <button class="btn" data-v="v-alert"><i>🔔</i>通知</button>
+  <button class="btn on" data-v="v-home"><i>🌤</i>今天</button>
+  <button class="btn" data-v="v-area"><i>☔</i>區域雨況</button>
+  <button class="btn" data-v="v-set"><i>⚙️</i>設定</button>
+</nav>
+<div id="toast"></div>
+
+<script>/*@@GL_JS@@*/</script>
+<script>/*@@TOPO_JS@@*/</script>
+<script>window.TW_TOPO=/*@@TW_TOPO@@*/;</script>
+<script>/*@@APP_JS@@*/</script>
+</body>
+</html>
