@@ -25,7 +25,7 @@ const OM={
       '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,cloud_cover,relative_humidity_2m,is_day'+
       '&minutely_15=precipitation'+
       '&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset,wind_speed_10m_max';
-    const d=await NET.json(u,{ttl:10*60e3,proxy:false});
+    const d=await NET.json(u,{ttl:10*60e3,proxy:false,key:'om.'+lat.toFixed(2)+','+lon.toFixed(2)+(elev?'@'+Math.round(elev):'')});   // 依約 1 公里格點快取，GPS 小幅移動也能用舊資料
     const H=d.hourly,hourly=H.time.map((t,i)=>({time:new Date(t+':00+08:00'),t:H.temperature_2m[i],feel:H.apparent_temperature[i],pop:H.precipitation_probability[i],rain:H.precipitation[i],code:H.weather_code[i],wind:H.wind_speed_10m[i],dir:H.wind_direction_10m[i],gust:H.wind_gusts_10m[i],uv:H.uv_index[i],cloud:H.cloud_cover[i],rh:H.relative_humidity_2m[i],day:H.is_day[i]}));
     const D=d.daily,daily=D.time.map((t,i)=>({date:new Date(t+'T00:00:00+08:00'),hi:D.temperature_2m_max[i],lo:D.temperature_2m_min[i],feelHi:D.apparent_temperature_max[i],feelLo:D.apparent_temperature_min[i],pop:D.precipitation_probability_max[i],rain:D.precipitation_sum[i],code:D.weather_code[i],uv:D.uv_index_max[i],sunrise:new Date(D.sunrise[i]+':00+08:00'),sunset:new Date(D.sunset[i]+':00+08:00'),windMax:D.wind_speed_10m_max[i]}));
     const M=d.minutely_15,min15=M?M.time.map((t,i)=>({time:new Date(t+':00+08:00'),rain:M.precipitation[i]})):[];

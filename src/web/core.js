@@ -68,7 +68,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>CFG.the
 /* ================= 網路 =================
    APK 內經由原生代理（https://wx.app/p?u=...）以避開 CORS；瀏覽器版直接 fetch。 */
 const NET={
-  mem:new Map(),
+  mem:new Map(),stale:{},
   url(u,proxy){return (isApp&&proxy!==false)?location.origin+'/p?u='+encodeURIComponent(u):u},
   async raw(u,{proxy,timeout=25000,headers}={}){
     const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),timeout);
@@ -79,7 +79,17 @@ const NET={
     const k=key||u;
     if(ttl){const m=this.mem.get(k);if(m&&Date.now()-m.t<ttl)return m.v;
       const c=lsGet('wx.c.'+k.slice(0,180),null);if(c&&Date.now()-c.t<ttl){this.mem.set(k,c);return c.v}}
-    const r=await this.raw(u,o);if(!r.ok)throw new Error('HTTP '+r.status);
+    // 連線失敗或伺服器忙碌（429/5xx）時：換另一條路再試一次（App 走手機端轉送／直連互換），
+    // 還是不行就用最近 24 小時內的舊資料，並標記為「舊資料」
+    let r,err;
+    try{r=await this.raw(u,o);if(!r.ok&&(r.status===429||r.status>=500))throw new Error('HTTP '+r.status)}
+    catch(e){err=e;r=null;
+      if(isApp){try{r=await this.raw(u,{...o,proxy:o.proxy===false?true:false});if(!r.ok)throw new Error('HTTP '+r.status);err=null}catch(e2){r=null;err=e2.name==='AbortError'?new Error('連線逾時'):(/HTTP/.test(e2.message)?e2:err)}}}
+    if(!r){const c=lsGet('wx.c.'+k.slice(0,180),null)||(this.mem.get(k));
+      if(c&&Date.now()-c.t<24*3600e3){this.stale[k]=c.t;return c.v}
+      throw new Error(err&&err.name==='AbortError'?'連線逾時':err&&/Failed to fetch|NetworkError|Load failed/i.test(err.message)?'連不上資料伺服器':(err&&err.message)||'網路錯誤')}
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    delete this.stale[k];
     const v=await r.json();
     if(ttl){const e={t:Date.now(),v};this.mem.set(k,e);const s=JSON.stringify(e);if(s.length<400000)try{localStorage.setItem('wx.c.'+k.slice(0,180),s)}catch(_){}}
     return v;

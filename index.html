@@ -475,7 +475,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>CFG.the
 /* ================= 網路 =================
    APK 內經由原生代理（https://wx.app/p?u=...）以避開 CORS；瀏覽器版直接 fetch。 */
 const NET={
-  mem:new Map(),
+  mem:new Map(),stale:{},
   url(u,proxy){return (isApp&&proxy!==false)?location.origin+'/p?u='+encodeURIComponent(u):u},
   async raw(u,{proxy,timeout=25000,headers}={}){
     const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),timeout);
@@ -486,7 +486,17 @@ const NET={
     const k=key||u;
     if(ttl){const m=this.mem.get(k);if(m&&Date.now()-m.t<ttl)return m.v;
       const c=lsGet('wx.c.'+k.slice(0,180),null);if(c&&Date.now()-c.t<ttl){this.mem.set(k,c);return c.v}}
-    const r=await this.raw(u,o);if(!r.ok)throw new Error('HTTP '+r.status);
+    // 連線失敗或伺服器忙碌（429/5xx）時：換另一條路再試一次（App 走手機端轉送／直連互換），
+    // 還是不行就用最近 24 小時內的舊資料，並標記為「舊資料」
+    let r,err;
+    try{r=await this.raw(u,o);if(!r.ok&&(r.status===429||r.status>=500))throw new Error('HTTP '+r.status)}
+    catch(e){err=e;r=null;
+      if(isApp){try{r=await this.raw(u,{...o,proxy:o.proxy===false?true:false});if(!r.ok)throw new Error('HTTP '+r.status);err=null}catch(e2){r=null;err=e2.name==='AbortError'?new Error('連線逾時'):(/HTTP/.test(e2.message)?e2:err)}}}
+    if(!r){const c=lsGet('wx.c.'+k.slice(0,180),null)||(this.mem.get(k));
+      if(c&&Date.now()-c.t<24*3600e3){this.stale[k]=c.t;return c.v}
+      throw new Error(err&&err.name==='AbortError'?'連線逾時':err&&/Failed to fetch|NetworkError|Load failed/i.test(err.message)?'連不上資料伺服器':(err&&err.message)||'網路錯誤')}
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    delete this.stale[k];
     const v=await r.json();
     if(ttl){const e={t:Date.now(),v};this.mem.set(k,e);const s=JSON.stringify(e);if(s.length<400000)try{localStorage.setItem('wx.c.'+k.slice(0,180),s)}catch(_){}}
     return v;
@@ -589,7 +599,7 @@ const OM={
       '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,cloud_cover,relative_humidity_2m,is_day'+
       '&minutely_15=precipitation'+
       '&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset,wind_speed_10m_max';
-    const d=await NET.json(u,{ttl:10*60e3,proxy:false});
+    const d=await NET.json(u,{ttl:10*60e3,proxy:false,key:'om.'+lat.toFixed(2)+','+lon.toFixed(2)+(elev?'@'+Math.round(elev):'')});   // 依約 1 公里格點快取，GPS 小幅移動也能用舊資料
     const H=d.hourly,hourly=H.time.map((t,i)=>({time:new Date(t+':00+08:00'),t:H.temperature_2m[i],feel:H.apparent_temperature[i],pop:H.precipitation_probability[i],rain:H.precipitation[i],code:H.weather_code[i],wind:H.wind_speed_10m[i],dir:H.wind_direction_10m[i],gust:H.wind_gusts_10m[i],uv:H.uv_index[i],cloud:H.cloud_cover[i],rh:H.relative_humidity_2m[i],day:H.is_day[i]}));
     const D=d.daily,daily=D.time.map((t,i)=>({date:new Date(t+'T00:00:00+08:00'),hi:D.temperature_2m_max[i],lo:D.temperature_2m_min[i],feelHi:D.apparent_temperature_max[i],feelLo:D.apparent_temperature_min[i],pop:D.precipitation_probability_max[i],rain:D.precipitation_sum[i],code:D.weather_code[i],uv:D.uv_index_max[i],sunrise:new Date(D.sunrise[i]+':00+08:00'),sunset:new Date(D.sunset[i]+':00+08:00'),windMax:D.wind_speed_10m_max[i]}));
     const M=d.minutely_15,min15=M?M.time.map((t,i)=>({time:new Date(t+':00+08:00'),rain:M.precipitation[i]})):[];
@@ -1106,7 +1116,9 @@ const Home={
       const fx=await FX.load(force);this.data=fx;this.render();setTimeout(()=>Places.warm(),800);
       this.loadNowcast(fx);
       Alerts.onData&&Alerts.onData(fx);
-    }catch(e){$('#hUpd').textContent='⚠️ '+e.message;console.error(e)}
+    }catch(e){console.error(e);
+      $('#hUpd').innerHTML='⚠️ '+esc(e.message)+'　<a href="#" id="hRetry">重試</a>';$('#hRetry').onclick=ev=>{ev.preventDefault();this.refresh(true)};
+      clearTimeout(this._rt);if(!this._rtN||this._rtN<3){this._rtN=(this._rtN||0)+1;this._rt=setTimeout(()=>this.refresh(true),20000*this._rtN)}}   // 自動重試 3 次
   },
   async loadNowcast(fx){
     const el=$('#hNowcast');el.className='nowcast';el.innerHTML='⏳ 讀取雷達回波中…';
@@ -1121,7 +1133,8 @@ const Home={
   render(){
     const fx=this.data,n=fx.now,T=fx.today;
     {const p=Places.cur();const area=(fx.loc.county||'')+' '+(fx.loc.town||'');$('#hPlace').innerHTML=(p.gps?esc(area)+' 📍':(p.name?esc(p.name)+' <small>'+esc(p.spot?(p.area||area):area)+'</small>':esc(area)))+(p.elev?` <small>⛰ ${Math.round(p.elev).toLocaleString()} m</small>`:'')+' <span class="plDn">▾</span>';}
-    $('#hUpd').textContent=`更新於 ${fmtHM(fx.at)}・${n.src}`;
+    {const st=Object.entries(NET.stale).filter(([k])=>k.startsWith('om.')).map(([,t])=>t)[0];this._rtN=0;
+      $('#hUpd').textContent=st?`⚠️ 目前連不上預報伺服器，顯示 ${fmtHM(new Date(st))} 的資料・${n.src}`:`更新於 ${fmtHM(fx.at)}・${n.src}`;}
     const day=n.day??1;
     $('#hIcon').textContent=n.text&&n.obs?wxIcon(n.text,day):wmoIcon(n.code,day);
     $('#hTemp').textContent=Math.round(n.t)+'°';
@@ -2359,7 +2372,7 @@ const Area={
    小改版（介面、功能調整）：開 App 時從 GitHub Pages 下載新的 index.html，直接套用，不用重裝 APK
    大改版（原生程式有改，version.json 的 minApk 大於手機上的 APK）：提示到 GitHub 下載新版 APK
    也可以在設定裡挑任一版本的 APK（最新或舊版）下載到手機安裝 */
-const APP_VER='1.7.0';
+const APP_VER='1.7.1';
 const GH={user:'IanLin1120',repo:'taiwan-weather',
   get pages(){return `https://${this.user.toLowerCase()}.github.io/${this.repo}/`},
   get web(){return `https://github.com/${this.user}/${this.repo}`},

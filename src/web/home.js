@@ -170,7 +170,9 @@ const Home={
       const fx=await FX.load(force);this.data=fx;this.render();setTimeout(()=>Places.warm(),800);
       this.loadNowcast(fx);
       Alerts.onData&&Alerts.onData(fx);
-    }catch(e){$('#hUpd').textContent='⚠️ '+e.message;console.error(e)}
+    }catch(e){console.error(e);
+      $('#hUpd').innerHTML='⚠️ '+esc(e.message)+'　<a href="#" id="hRetry">重試</a>';$('#hRetry').onclick=ev=>{ev.preventDefault();this.refresh(true)};
+      clearTimeout(this._rt);if(!this._rtN||this._rtN<3){this._rtN=(this._rtN||0)+1;this._rt=setTimeout(()=>this.refresh(true),20000*this._rtN)}}   // 自動重試 3 次
   },
   async loadNowcast(fx){
     const el=$('#hNowcast');el.className='nowcast';el.innerHTML='⏳ 讀取雷達回波中…';
@@ -185,7 +187,8 @@ const Home={
   render(){
     const fx=this.data,n=fx.now,T=fx.today;
     {const p=Places.cur();const area=(fx.loc.county||'')+' '+(fx.loc.town||'');$('#hPlace').innerHTML=(p.gps?esc(area)+' 📍':(p.name?esc(p.name)+' <small>'+esc(p.spot?(p.area||area):area)+'</small>':esc(area)))+(p.elev?` <small>⛰ ${Math.round(p.elev).toLocaleString()} m</small>`:'')+' <span class="plDn">▾</span>';}
-    $('#hUpd').textContent=`更新於 ${fmtHM(fx.at)}・${n.src}`;
+    {const st=Object.entries(NET.stale).filter(([k])=>k.startsWith('om.')).map(([,t])=>t)[0];this._rtN=0;
+      $('#hUpd').textContent=st?`⚠️ 目前連不上預報伺服器，顯示 ${fmtHM(new Date(st))} 的資料・${n.src}`:`更新於 ${fmtHM(fx.at)}・${n.src}`;}
     const day=n.day??1;
     $('#hIcon').textContent=n.text&&n.obs?wxIcon(n.text,day):wmoIcon(n.code,day);
     $('#hTemp').textContent=Math.round(n.t)+'°';
